@@ -38,7 +38,13 @@ const replacePlaceholders = async (
     const [firstName, ...lastNameParts] = realName.split(" ");
     const lastName = lastNameParts.join(" ");
 
-    return transcript
+    const parseRandomOpts = (transcript: string): string => transcript.replace(/\{([^}]+)\}/g, (match, opts) => {
+      const choices: string = opts.split("|");
+      const i = Math.floor(Math.random() * choices.length);
+      return choices[i];
+    })
+
+    return parseRandomOpts(transcript)
       .replace(/<mention>/g, `<@${userId}>`)
       .replace(/<real_name>/g, realName)
       .replace(/<first_name>/g, firstName)

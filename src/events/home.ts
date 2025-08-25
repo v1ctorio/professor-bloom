@@ -1,8 +1,13 @@
-import { Middleware, SlackEventMiddlewareArgs, View } from "@slack/bolt";
+import { AppHomeOpenedEvent, Middleware, SlackEventMiddlewareArgs, View } from "@slack/bolt";
 import { PrismaClient } from "@prisma/client";
+import { slackClient } from "src";
 
 type HomeEvent = Middleware<SlackEventMiddlewareArgs<"app_home_opened">>;
-
+enum AuthLevel {
+  Unauthorized,
+  Gardener,
+  Admin
+}
 const prisma = new PrismaClient();
 
 const getAllWelcomers = async () =>
@@ -192,30 +197,86 @@ const createAdminSection = async (): Promise<any[]> => {
 };
 
 export const createHomeView = async (
-  event: any,
-  isAdmin: boolean,
-): Promise<View> => ({
-  type: "home",
-  blocks: [
-    ...(await createDashboardSection(event)),
-    ...(isAdmin ? await createAdminSection() : []),
-  ],
-});
+  event: AppHomeOpenedEvent,
+  authLevel: AuthLevel,
+  installed: boolean
+): Promise<View> => {
+  
+  
+  if (authLevel === AuthLevel.Unauthorized) {
+    return {
+	"type": "home",
+	"blocks": [
+		{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": "I help introducing people to the community!."
+			}
+		}
+	]
+}
+  }
 
-export const isUserAdmin = async (userId: string): Promise<boolean> => {
+  if (!installed) { 
+    const installURL = process.env.SLACK_INSTALL_URL;
+    return {
+      type: "home",
+      blocks: [
+        {
+          "type": "section",
+          "text": {
+            "type": "mrkdwn",
+            "text": "You are authorized but your "
+          }
+        }
+      ]
+    }
+  }
+  
+  
+
+  
+  return {
+    type: "home",
+    blocks: [
+      ...(await createDashboardSection(event)),
+      ...(authLevel == AuthLevel.Admin ? await createAdminSection() : []),
+      ],
+    }
+  };
+
+export const userAuthLevel = async (userId: string): Promise<AuthLevel> => {
   const user = await prisma.user.findUnique({
     where: { slack: userId },
     select: { admin: true },
   });
-  return user?.admin || false;
+  console.log({user})
+
+  if(!user) {
+    return AuthLevel.Unauthorized
+  }
+  
+  return user.admin ? AuthLevel.Admin : AuthLevel.Gardener;
 };
 
+export const userIsAppInstalled = async (userId: string): Promise<boolean> => {
+  const count = await prisma.slackToken.count({
+    where: { userId }
+  });
+
+  console.log("IT IS INSTALLED COUNT: ",count)
+  return count > 0
+}
+
 export const handleHomeTab: HomeEvent = async ({ event, client }) => {
+  console.log("Received home view")
   try {
-    const isAdmin = await isUserAdmin(event.user);
+    const authLevel = await userAuthLevel(event.user);
+    const isInstalled = await userIsAppInstalled(event.user);
     await client.views.publish({
       user_id: event.user,
-      view: await createHomeView(event, isAdmin),
+      view: await createHomeView(event, authLevel, isInstalled),
     });
   } catch (error) {
     console.error("Error publishing home view:", error);

@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import { isUserAdmin, createHomeView } from "../events/home";
+import { userAuthLevel, createHomeView, userIsAppInstalled } from "../events/home";
 
 const prisma = new PrismaClient();
 
@@ -81,10 +81,11 @@ const handleRemoveWelcomer = async ({ body, client, welcomerId }) => {
       text: `Successfully removed <@${welcomerId}> as a welcomer.`,
     });
 
-    const isAdmin = await isUserAdmin(body.user.id);
+    const authLevel = await userAuthLevel(body.user.id);
+    const isInstalled = await userIsAppInstalled(body.user.id);
     await client.views.publish({
       user_id: body.user.id,
-      view: await createHomeView(body, isAdmin),
+      view: await createHomeView(body, authLevel, isInstalled),
     });
   } catch (error) {
     console.error("Error removing welcomer:", error);
@@ -116,10 +117,11 @@ const handleToggleAdmin = async ({ body, client, welcomerId }) => {
       } an admin.`,
     });
 
-    const isAdmin = await isUserAdmin(body.user.id);
+    const authLevel = await userAuthLevel(body.user.id);
+    const isInstalled = await userIsAppInstalled(body.user.id);
     await client.views.publish({
       user_id: body.user.id,
-      view: await createHomeView(body, isAdmin),
+      view: await createHomeView(body, authLevel, isInstalled),
     });
   } catch (error) {
     console.error("Error toggling admin status:", error);
@@ -309,10 +311,11 @@ export const handleAddWelcomerSubmission = async ({
       text: `Successfully added <@${userId}> as a welcomer${isAdmin ? " and admin" : ""}.`,
     });
 
-    const currentUserIsAdmin = await isUserAdmin(body.user.id);
+    const currentUserAuthLevel = await userAuthLevel(body.user.id);
+    const currentUserIsInstalled = await userIsAppInstalled(body.user.id);
     await client.views.publish({
       user_id: body.user.id,
-      view: await createHomeView(body, currentUserIsAdmin),
+      view: await createHomeView(body, currentUserAuthLevel, currentUserIsInstalled),
     });
   } catch (error) {
     console.error("Error adding welcomer:", error);
